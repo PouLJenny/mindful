@@ -283,6 +283,67 @@ def cmd_history(args: argparse.Namespace) -> int:
     return 0
 
 
+NOTE_MAX_CHARS = 500
+
+
+def cmd_note(args: argparse.Namespace) -> int:
+    """Attach a note to the most-recent completed session."""
+    text = (args.text or "").strip()
+    if not text:
+        print("error: note text must be 1-500 characters (got empty)", file=sys.stderr)
+        return 1
+    if len(text) > NOTE_MAX_CHARS:
+        print(
+            f"error: note text must be 1-{NOTE_MAX_CHARS} characters "
+            f"(got {len(text)})",
+            file=sys.stderr,
+        )
+        return 1
+
+    home = _mindful_dir()
+    sessions_file = home / SESSIONS_FILE
+    if not sessions_file.exists():
+        print("error: no session to annotate", file=sys.stderr)
+        return 1
+
+    sessions, corrupt = _load_sessions(sessions_file)
+    if corrupt:
+        print(
+            f"error: {sessions_file} is unreadable; refusing to annotate",
+            file=sys.stderr,
+        )
+        return 2
+
+    # Most-recent completed = last entry (in append order) with status=completed.
+    target_idx: int | None = None
+    for i in range(len(sessions) - 1, -1, -1):
+        if sessions[i].get("status") == "completed":
+            target_idx = i
+            break
+
+    if target_idx is None:
+        print("error: no session to annotate", file=sys.stderr)
+        return 1
+
+    target = sessions[target_idx]
+    if "note" in target and target["note"] and not args.force:
+        print(
+            "error: a note already exists on the most recent session; "
+            "pass --force to overwrite",
+            file=sys.stderr,
+        )
+        return 1
+
+    target["note"] = text
+    sessions[target_idx] = target
+    try:
+        _save_sessions(sessions_file, sessions)
+    except OSError as exc:
+        print(f"error: cannot write {sessions_file}: {exc}", file=sys.stderr)
+        return 3
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = _UserErrorArgumentParser(
         prog="mindful",
@@ -310,6 +371,16 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("stats", help="Show meditation stats (read-only)")
     sub.add_parser("history", help="List completed sessions (read-only)")
 
+    p_note = sub.add_parser(
+        "note", help="Attach a note to the most recent completed session"
+    )
+    p_note.add_argument("text", help=f"Note text (1-{NOTE_MAX_CHARS} chars)")
+    p_note.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite an existing note on the target session",
+    )
+
     return parser
 
 
@@ -322,6 +393,8 @@ def main(argv: list[str] | None = None) -> int:
         rc = cmd_stats(args)
     elif args.cmd == "history":
         rc = cmd_history(args)
+    elif args.cmd == "note":
+        rc = cmd_note(args)
     else:
         parser.print_help()
         rc = 0
