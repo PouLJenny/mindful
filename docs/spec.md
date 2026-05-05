@@ -94,3 +94,20 @@ avg_minutes, completion_rate_30d as a table.
 - All times stored as UTC ISO8601
 - All file writes are atomic (temp file + rename)
 - Exit codes: 0=success, 1=user error, 2=data error, 3=system error
+
+### Read-only commands
+
+The following commands MUST NOT mutate `~/.mindful/` or its contents.
+They read whatever exists and treat absence as zero state. They MUST NOT
+create the `~/.mindful/` directory, `sessions.json`, or `streak.json` as
+a side effect.
+
+- `mindful stats`
+- `mindful history` (and any future read-only flags such as
+  `--last N`, `--since DATE`)
+- `mindful config --get …` (read paths only; mutating forms such as
+  `--bell-sound X` are NOT read-only by definition and may write the
+  config file)
+
+This is a hard contract — Layer-4 state-delta tests pin it. Any future
+command added under this list inherits the same no-side-effect rule.
