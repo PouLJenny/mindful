@@ -1,0 +1,26 @@
+# KitchenLoop coverage matrix — mindful
+# Tracks which (subcommand × duration × mode × state_condition) combinations
+# have been exercised by an iteration. Updated by ideate phase per iteration.
+
+last_updated: 2026-05-05
+
+# Total dimensional space (cartesian product, minus blocked combos):
+#   subcommands × duration × mode × state_condition
+#   start: 4 dur × 3 mode × 5 state = 60
+#   note:  4 dur × (mode N/A)  × 5 state = 20
+#   stats: (dur N/A) × (mode N/A) × 5 state = 5
+#   history: 4 dur × (mode N/A) × 5 state = 20
+#   config: (dur N/A) × 3 mode × 5 state = 15
+#   total = 120
+total_combos: 120
+tested_combos: 1
+coverage_pct: 0.83
+
+tested:
+  - iteration: 1
+    tier: T1
+    subcommand: start
+    duration: 1min
+    mode: bell_only
+    state_condition: first_ever_session
+    notes: "Bootstrap L3 smoke test (Priority Zero). RED until execute phase."
