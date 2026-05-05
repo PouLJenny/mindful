@@ -152,6 +152,12 @@ def cmd_start(args: argparse.Namespace) -> int:
     fast_tick = os.environ.get("MINDFUL_FAST_TICK") == "1"
     seconds = args.duration if fast_tick else args.duration * 60
 
+    print(
+        f"starting {args.duration}min {args.mode} session "
+        f"— Ctrl+C to interrupt",
+        flush=True,
+    )
+
     interrupted = False
     try:
         time.sleep(seconds)
@@ -171,6 +177,9 @@ def cmd_start(args: argparse.Namespace) -> int:
         streak = _load_streak(streak_file)
         streak = _bump_streak(streak, date.today())
         _save_streak(streak_file, streak)
+        print("DING — session complete", flush=True)
+    else:
+        print("session interrupted", flush=True)
 
     print(session_id)
     return 0
