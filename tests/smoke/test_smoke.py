@@ -23,8 +23,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 SESSION_ID_RE = re.compile(r"[0-9a-fA-F-]{8,}")
 
 
