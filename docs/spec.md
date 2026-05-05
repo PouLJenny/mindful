@@ -64,18 +64,36 @@ countdown, plays guidance, and on completion records the session.
 
 ### `mindful stats`
 
-**User view**: Prints current_streak, longest_streak, total_minutes,
-avg_minutes, completion_rate_30d as a table.
+**User view**: Prints five metrics — current_streak, longest_streak,
+total_minutes, avg_minutes, completion_rate_30d — one per line, in that
+order.
 
 **Preconditions**: None — works with zero sessions, returns zeros.
+
+**Output format** (pinned):
+- One metric per line, in the exact order above (top-to-bottom).
+- Each line is `<metric_name>: <value>`. Metric names appear **verbatim**
+  (snake_case, lowercase, no humanisation). Whitespace between the colon
+  and the value may be padded for column alignment but is not part of the
+  contract.
+- Value formatting:
+  - `current_streak`, `longest_streak`, `total_minutes` — integer (e.g. `0`, `42`).
+  - `avg_minutes` — float with one decimal place (e.g. `0.0`, `12.5`).
+  - `completion_rate_30d` — fraction in `[0.00, 1.00]` with two decimal
+    places (e.g. `0.00`, `0.83`). It is **not** a percentage.
+- Lines are written to stdout. Warnings (corrupt data, etc.) go to stderr.
 
 **Failure modes**:
 - `sessions.json` corrupt → recover what's parseable, warn to stderr
 - Timezone change between sessions → use UTC internally
 
 **Ground truth**:
-- stdout contains all 5 numeric metrics
-- For corrupt data: warning to stderr, partial stats to stdout, exit 0
+- stdout contains all 5 numeric metrics, one per line, in the pinned
+  order, with the pinned formatting above.
+- For corrupt data: warning to stderr, partial stats to stdout, exit 0.
+
+**Side effects**: None. `mindful stats` is **read-only** — see
+"Read-only commands" under Cross-cutting Constraints.
 
 ---
 
