@@ -118,7 +118,12 @@ def cmd_start(args: argparse.Namespace) -> int:
     sessions_file = home / SESSIONS_FILE
     streak_file = home / STREAK_FILE
 
-    sessions, _ = _load_sessions(sessions_file)
+    sessions, was_corrupt = _load_sessions(sessions_file)
+    if was_corrupt:
+        backup = sessions_file.with_suffix(f".corrupt-{int(time.time())}")
+        sessions_file.replace(backup)
+        print(f"warning: corrupt sessions.json backed up to {backup.name}", file=sys.stderr)
+        sessions = []
     for entry in sessions:
         if entry.get("status") == "in_progress":
             print(
