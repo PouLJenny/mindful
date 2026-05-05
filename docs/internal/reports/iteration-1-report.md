@@ -1,170 +1,171 @@
 # Kitchen Loop Report - Iteration 1
 
-## Scenario: Bootstrap L3 Smoke Test — `mindful start --duration 1 --mode bell_only`
+## Scenario: `mindful stats` on a brand-new home (zero-sessions happy path)
 **Date**: 2026-05-05
 **Mode**: strategy
-**Tier**: T1 Foundation (Priority Zero — L3 smoke bootstrap)
-**Features Exercised**: subcommands=start, duration=1min, mode=bell_only, state_condition=first_ever_session
+**Tier**: T1 Foundation
+**Features Exercised**: subcommands=stats, duration=N/A (blocked), mode=N/A (blocked), state_condition=first_ever_session
+
+## Iteration context
+
+Priority Zero (L3 smoke bootstrap) was satisfied by a previous run of this
+iteration: `tests/smoke/test_smoke.py` exists and `kitchenloop.yaml` →
+`verification.oracle.smoke_command` is wired to it. The smoke test currently
+goes RED on layers 2-4 (CLI is a `NotImplementedError` stub) — that is
+intended: execute phase will turn it GREEN.
+
+This run picks up the **next-most-valuable** scenario for the regression
+gate: a second L3-style integration test exercising a *different subcommand
+and a different state-condition* than the smoke. That widens the safety net
+before any production code exists, so when the execute phase implements
+`mindful start` it cannot accidentally break `mindful stats` (and vice
+versa). Both tests are deliberately RED until execute phase.
 
 ## What I Did (as a user)
 
-I approached this as a brand-new user trying to follow the `README.md` happy
-path: install the tool and run `mindful start --duration 1 --mode bell_only`.
+I am a brand-new user who has just installed `mindful`. I have never
+meditated with this tool. Per `docs/spec.md`, `mindful stats` is documented
+as having **no preconditions** — "works with zero sessions, returns zeros".
+That is a strong promise; the natural first thing a curious user does is
+poke at the subcommands without sitting first. So I set out to exercise
+exactly that.
 
-1. Read `README.md` and `docs/spec.md` — clear single-page spec, exit codes
-   defined, ground truth defined per command. Good.
-2. Checked the `kitchenloop.yaml` and confirmed `verification.oracle.smoke_command`
-   was empty (`""`). Per the loop's Priority Zero rule, this means the entire
-   iteration must focus on bootstrapping the L3 integration smoke test.
-3. Tried to use the CLI:
-   - `python -c "from mindful.cli import main; main()"` → `ModuleNotFoundError`
-     (package not installed in system Python).
-   - `pip install -e .` → externally-managed-environment error
-     (Manjaro/PEP 668).
-   - `.venv/bin/mindful` → ran, but only because the venv had it pre-installed.
-     Output:
-     ```
-     NotImplementedError: mindful CLI not built yet — KitchenLoop will fill this in
-     ```
-4. Wrote `tests/smoke/test_smoke.py` covering all 4 layers (Compile / Execute /
-   Parse / State Deltas) for the chosen scenario. Established the
-   `MINDFUL_FAST_TICK=1` env contract so the test can run in seconds rather
-   than waiting a real minute.
-5. Ran `pytest tests/smoke/ -x` → as expected, layer 1 (compile) passes,
-   layers 2–4 fail because the CLI is a stub. This is the desired RED state
-   that the execute phase will turn GREEN.
-6. Updated `kitchenloop.yaml` → `verification.oracle.smoke_command: "pytest tests/smoke/ -x"`.
-7. Wrote `.kitchenloop/unbeatable-tests.md` documenting the L3 definition,
-   the 4-layer pattern, the fast-tick contract, and a backlog of L4 scenarios.
-8. Created `.kitchenloop/coverage-matrix.yaml` with the dimensional total and
-   this iteration's covered combo.
+1. Read `docs/spec.md` § `mindful stats`. Confirmed the spec says:
+   - **Preconditions**: None — works with zero sessions, returns zeros.
+   - **Ground truth**: stdout contains all 5 numeric metrics
+     (`current_streak`, `longest_streak`, `total_minutes`, `avg_minutes`,
+     `completion_rate_30d`).
+   - **Exit code**: 0 (success) even with no data.
+2. Tried to actually run it:
+   ```
+   $ HOME=/tmp/mindful-fresh-home /home/poul/workspace/src/mindful/.venv/bin/mindful stats
+   Traceback (most recent call last):
+     File ".../mindful/cli.py", line 2, in main
+       raise NotImplementedError("mindful CLI not built yet — KitchenLoop will fill this in")
+   NotImplementedError: mindful CLI not built yet — KitchenLoop will fill this in
+   ```
+   Exit code 1, no JSON files written. Same blocker as BUG-1 from the
+   bootstrap report — the CLI is a stub.
+3. Wrote `tests/integration/test_stats_zero_sessions.py` — a 4-layer L3
+   test that codifies the spec's promise:
+   - Layer 1 (Compile): `mindful.cli` imports.
+   - Layer 2 (Execute): `mindful stats` exits 0 on a fresh `$HOME`.
+   - Layer 3 (Parse): stdout mentions all 5 documented metric names.
+   - Layer 4 (State): stats is read-only — `~/.mindful/sessions.json`
+     and `~/.mindful/streak.json` are *not* created (or, if created,
+     contain empty/zero state). This is a state-delta assertion of the
+     "no preconditions, no side effects" property.
+4. Ran `pytest -x` and confirmed the new test goes RED for the same
+   reason as the smoke test — `NotImplementedError`. Layer 1 passes.
+5. Updated `.kitchenloop/coverage-matrix.yaml` to add the new combo and
+   re-counted the coverage percentage.
 
 ## What Worked
 
-- **Spec quality**. `docs/spec.md` is the right size: explicit ground truth
-  per command, explicit exit codes, explicit failure modes, explicit
-  non-goals. This is unusually good for a freshly-bootstrapped repo and
-  made test design straightforward.
-- **`pyproject.toml` is already wired**. `[project.scripts] mindful = "mindful.cli:main"`
-  means once `cli.py` is implemented, the smoke test will pick up the
-  console script automatically — no plumbing changes needed.
-- **Layer 1 (compile) passes today**. The package imports cleanly, so we
-  immediately get value from the smoke test even before the CLI is built:
-  any future syntax error or import-time failure is caught by layer 1.
+- **Spec is self-consistent and testable.** The "zero-sessions returns
+  zeros" promise is precisely the kind of low-bar invariant that makes a
+  great L3 test: easy to express, hard to silently regress.
+- **`HOME` indirection works**. The smoke test's pattern of overriding
+  `$HOME` to a `tmp_path` carries over verbatim, so the new test reuses
+  the same fixture style with no plumbing changes.
+- **`pyproject.toml` script entry already in place**, so the
+  `shutil.which("mindful")` resolution works the moment `cli.py` is
+  implemented.
 
 ## Friction Points
 
-- **No `tests/` directory at all** in the worktree skeleton. Pytest had no
-  rootdir-anchored test tree. Created `tests/__init__.py` and
-  `tests/smoke/__init__.py` to make this explicit.
-- **No `pytest` configuration** in `pyproject.toml`. Pytest auto-discovered
-  the rootdir but a `[tool.pytest.ini_options]` block with `testpaths = ["tests"]`
-  would make the intent clearer. Filing as IMP-1.
-- **No way to run the CLI under `pytest` in real time**. A `--duration 1`
-  session is a 60-second wall-clock wait, which is incompatible with a
-  fast smoke test. I had to invent a contract (`MINDFUL_FAST_TICK=1`) and
-  document it in `unbeatable-tests.md` so the execute phase honors it.
-  Filing as FEAT-1.
-- **Single user-facing entrypoint is undocumented for testability**. There's
-  no `python -m mindful` shim — the smoke test falls back to
-  `python -c "from mindful.cli import main; main()"`, which is awkward.
-  Filing as IMP-2.
+- **CLI is still a stub.** Same blocker as BUG-1 — every documented
+  command crashes with `NotImplementedError`. Cannot smoke any scenario
+  end-to-end until execute phase lands `mindful start` (and at least
+  enough scaffolding to make `mindful stats` return zeros).
+- **Spec doesn't pin the table format.** "Prints current_streak,
+  longest_streak, total_minutes, avg_minutes, completion_rate_30d as a
+  table" — but does not pin column ordering, separators, or whether
+  metric names appear verbatim. I wrote the assertion as
+  *"all five metric names appear somewhere in stdout"* (case-insensitive
+  substring match), which is the loosest contract that still proves the
+  table is complete. Filing as IMP-3 to tighten the spec.
+- **Spec doesn't say what files the zero-sessions case is allowed to
+  create.** Strict reading of "no preconditions" implies the command can
+  run before `~/.mindful/` exists — but does it create the directory and
+  empty `sessions.json` as a side effect? I assumed **no**:
+  `mindful stats` should not mutate disk state. Documented this assumption
+  in the test and as IMP-4 to clarify in the spec.
+- **No `python -m mindful` shim still.** Carried over from prior
+  iteration's IMP-2 — both smoke and integration tests fall back to
+  `python -c "from mindful.cli import main; main()"` when `mindful`
+  isn't on `PATH`.
 
 ## Bugs Found
 
-**[BUG-1] `mindful` CLI is unimplemented — every command crashes with `NotImplementedError`**
+**[BUG-1] (carry-over) `mindful` CLI is unimplemented — every command crashes with `NotImplementedError`**
 
-Reproduction:
-```
-$ .venv/bin/mindful start --duration 1 --mode bell_only
-Traceback (most recent call last):
-  File ".../mindful/src/mindful/cli.py", line 2, in main
-    raise NotImplementedError("mindful CLI not built yet — KitchenLoop will fill this in")
-```
-
-Severity: blocker (this is by design for the skeleton, but every documented
-command in `README.md` and `docs/spec.md` is currently non-functional).
-The bootstrap L3 smoke test (this iteration's deliverable) will turn from
-RED → GREEN once execute phase implements the spec.
+Already filed in prior iteration's report. Re-confirmed: `mindful stats`,
+`mindful start`, `mindful note`, `mindful history`, `mindful config` all
+exit 1 with `NotImplementedError`. Will be cleared by execute phase.
 
 ## Missing Features
 
-**[FEAT-1] `MINDFUL_FAST_TICK` env var to compress test wall-clock**
+**[FEAT-3] `mindful stats` zero-state behavior**
 
-Description: To run the L3 smoke test inside `pytest` (and thus inside the
-regression gate), the implementation MUST honor an env var that compresses
-N-minute durations to N-second durations. This is the standard "test clock"
-pattern. Documented in `.kitchenloop/unbeatable-tests.md`. The execute phase
-implementing `mindful start` should gate the sleep/timer logic on this env
-var.
+When `~/.mindful/sessions.json` does not exist, `mindful stats` must:
+- Exit 0.
+- Print all five metrics (`current_streak`, `longest_streak`,
+  `total_minutes`, `avg_minutes`, `completion_rate_30d`) with value `0`
+  (or `0.0` for `completion_rate_30d`).
+- Not create `sessions.json` or `streak.json` as a side effect (read-only
+  command).
 
-**[FEAT-2] `mindful` is missing every documented subcommand**
-
-Description: `start`, `note`, `stats`, `history`, `config` are all spec'd in
-`docs/spec.md` but none exist. Each is a future iteration. Backlog
-candidates already enumerated in `.kitchenloop/unbeatable-tests.md` under
-"What's still uncovered".
+Spec says "works with zero sessions, returns zeros" but does not pin the
+side-effect rule. This iteration codifies the no-side-effect interpretation
+in `tests/integration/test_stats_zero_sessions.py`.
 
 ## Improvements
 
-**[IMP-1] Add `[tool.pytest.ini_options]` section to `pyproject.toml`**
+**[IMP-3] Pin `mindful stats` output format in the spec**
 
-```toml
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-addopts = "-ra"
-```
+Currently `docs/spec.md` says only "as a table". To make the L3 test
+contract robust against trivial UI changes, the spec should pin:
+- Whether metric names appear verbatim or as labels (e.g.
+  `current_streak: 0` vs `Current Streak │ 0`).
+- The five metric names (already named — keep them).
+- Whether `completion_rate_30d` is a percentage (`0.0%`) or a fraction
+  (`0.0`).
 
-Makes pytest invocation reliable across CI/local without `--rootdir` games.
+**[IMP-4] Spec read-only commands explicitly**
 
-**[IMP-2] Add `src/mindful/__main__.py`** so users (and tests) can invoke
-the CLI as `python -m mindful` without the awkward
-`python -c "from mindful.cli import main; main()"` fallback. Two-line file:
+`mindful stats`, `mindful history`, `mindful config --get` should be
+documented as **read-only**: they must not create or modify files. This
+makes Layer-4 state-delta assertions trivially pinable.
 
-```python
-from mindful.cli import main
-if __name__ == "__main__":
-    main()
-```
-
-**[IMP-3] `.kitchenloop/` and `kitchenloop.yaml` are not in the worktree**
-
-These live in the main repo dir and aren't tracked by git. The instructions
-told me to update them, which I did — but a more disciplined setup would
-either commit them (so iteration-to-iteration state is visible in PRs) or
-keep them in a sibling `.kitchenloop/state/` that's clearly out-of-tree.
-Not blocking, just a foot-gun for future maintainers.
+**[IMP-1, IMP-2] (carry-over)** Add `[tool.pytest.ini_options]` and
+`src/mindful/__main__.py`. Still applicable.
 
 ## Tests Added
 
-- `tests/__init__.py` (new, empty package marker)
-- `tests/smoke/__init__.py` (new, empty package marker)
-- `tests/smoke/test_smoke.py` (new, 3 tests):
-  - `test_layer1_compile_package_imports` — currently PASSES
-  - `test_layer234_start_session_end_to_end` — currently FAILS (RED, expected)
-  - `test_cli_help_does_not_crash` — currently FAILS (RED, expected)
+- `tests/integration/__init__.py` (new, empty package marker)
+- `tests/integration/test_stats_zero_sessions.py` (new, 1 main test
+  covering all 4 layers for `mindful stats` first-ever-session):
+  - `test_stats_zero_sessions_all_four_layers` — currently RED, expected
+    to turn GREEN once execute phase ships `mindful stats`.
 
-## Files Modified Outside the Worktree (KitchenLoop state)
+The smoke test (`tests/smoke/test_smoke.py`) is unchanged.
 
-- `/home/poul/workspace/src/mindful/kitchenloop.yaml` — set
-  `verification.oracle.smoke_command: "pytest tests/smoke/ -x"`
-- `/home/poul/workspace/src/mindful/.kitchenloop/unbeatable-tests.md` — new file
-- `/home/poul/workspace/src/mindful/.kitchenloop/coverage-matrix.yaml` — new file
+## Coverage Delta
+
+- Before this run: 1 / 120 combos (0.83%).
+- After this run: 2 / 120 combos (1.67%).
+- New combo: `subcommands=stats`, `duration=N/A`, `mode=N/A`,
+  `state_condition=first_ever_session`.
 
 ## Outcome
 
-**SUCCESS** — Priority Zero deliverable complete:
-1. ✓ L3 smoke test exists and is wired into `kitchenloop.yaml`.
-2. ✓ The test follows the 4-layer pattern (Compile / Execute / Parse / State).
-3. ✓ Layer 1 already passes today; layers 2–4 RED as expected, will turn
-     GREEN once execute phase implements `mindful start`.
-4. ✓ `unbeatable-tests.md` defines L3 for this project and lists L4 backlog.
-5. ✓ Coverage matrix initialized with one iteration's coverage entry.
-
-The regression gate (`pytest`) now meaningfully covers the
-"38 passing unit tests, completely broken service" anti-pattern: any future
-unit test passing while `mindful start` is broken end-to-end will be caught
-by `tests/smoke/test_smoke.py`.
+**SUCCESS** — A second L3 integration test now exists in the regression
+gate, broadening coverage from one (`start`/`bell_only`/`first_ever_session`)
+to two distinct subcommand × state combos. Both tests are RED today,
+which is the desired pre-execute state: each will turn GREEN
+independently as the corresponding subcommand is implemented, and either
+turning RED again later will fail the regression gate immediately.
 
 ## TIER
 
