@@ -1,0 +1,14 @@
+{
+  "iterations": [
+    {
+      "num": 1,
+      "ts": "2026-05-05T13:52:18Z",
+      "test_total": 3,
+      "test_passed": 3,
+      "test_failed": 0,
+      "test_skipped": 0,
+      "pass_rate": 1.0000,
+      "tier": "T1"
+    }
+  ]
+}

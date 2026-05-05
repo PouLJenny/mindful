@@ -1,0 +1,11 @@
+{
+  "pr_attempts": {
+    "8": {
+      "attempts": 0,
+      "last_result": "UNKNOWN",
+      "ts": "2026-05-05T13:46:23Z"
+    }
+  },
+  "total_merged": 0,
+  "total_stuck": 0
+}
