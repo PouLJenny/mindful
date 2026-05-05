@@ -1,0 +1,16 @@
+[project]
+name = "mindful"
+version = "0.0.1"
+description = "A mindful meditation companion CLI"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+mindful = "mindful.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+line-length = 100
