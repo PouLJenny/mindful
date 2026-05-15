@@ -83,6 +83,15 @@ order.
     places (e.g. `0.00`, `0.83`). It is **not** a percentage.
 - Lines are written to stdout. Warnings (corrupt data, etc.) go to stderr.
 
+**Empty / zero-denominator behavior**:
+- When there are zero sessions in the last 30 days (so the denominator of
+  `completion_rate_30d` would be zero), `completion_rate_30d` is `0.00`.
+  It is **not** `NaN`, **not** `1.00`, and the command does **not** error.
+  This applies equivalently when `sessions.json` is missing — absence is
+  treated as the same zero state.
+- `avg_minutes` follows the same convention: with zero completed sessions,
+  it is `0.0` (not `NaN`).
+
 **Failure modes**:
 - `sessions.json` corrupt → recover what's parseable, warn to stderr
 - Timezone change between sessions → use UTC internally
