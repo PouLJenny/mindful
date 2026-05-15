@@ -14,53 +14,16 @@ from __future__ import annotations
 
 import os
 import re
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-
-_PROJECT_SRC = str(Path(__file__).resolve().parents[2] / "src")
-
-
-def _mindful_invocation() -> list[str]:
-    try:
-        import mindful  # noqa: F401
-        return [sys.executable, "-m", "mindful"]
-    except ImportError:
-        binary = shutil.which("mindful")
-        if binary:
-            return [binary]
-        return [sys.executable, "-c", "from mindful.cli import main; main()"]
-
-
-def _run(cmd: list[str], home: Path, fast_tick: bool = False, timeout: int = 30):
-    pythonpath = os.environ.get("PYTHONPATH", "")
-    pythonpath = (
-        f"{_PROJECT_SRC}{os.pathsep}{pythonpath}" if pythonpath else _PROJECT_SRC
-    )
-    env = {**os.environ, "HOME": str(home), "PYTHONPATH": pythonpath}
-    if fast_tick:
-        env["MINDFUL_FAST_TICK"] = "1"
-    return subprocess.run(
-        cmd, env=env, capture_output=True, text=True, timeout=timeout
-    )
-
-
 SESSION_ID_RE = re.compile(r"[0-9a-fA-F-]{8,}")
 
 
-def test_start_emits_banner_and_completion_line(tmp_path: Path):
+def test_start_emits_banner_and_completion_line(mindful_run):
     """`mindful start` prints a banner up front and a completion signal at end."""
-    fake_home = tmp_path / "home"
-    fake_home.mkdir()
-
-    result = _run(
-        _mindful_invocation()
-        + ["start", "--duration", "1", "--mode", "bell_only"],
-        home=fake_home,
-        fast_tick=True,
-    )
+    result = mindful_run(["start", "--duration", "1", "--mode", "bell_only"])
 
     assert result.returncode == 0, (
         f"start exited {result.returncode}\n"
@@ -104,16 +67,14 @@ def test_start_emits_banner_and_completion_line(tmp_path: Path):
     )
 
 
-def test_start_help_does_not_crash(tmp_path: Path):
+def test_start_help_does_not_crash(mindful_home: Path):
     """Sanity check: --help still works after the banner refactor."""
-    cmd = _mindful_invocation() + ["start", "--help"]
-    pythonpath = os.environ.get("PYTHONPATH", "")
-    pythonpath = (
-        f"{_PROJECT_SRC}{os.pathsep}{pythonpath}" if pythonpath else _PROJECT_SRC
-    )
-    env = {**os.environ, "HOME": str(tmp_path), "PYTHONPATH": pythonpath}
     result = subprocess.run(
-        cmd, env=env, capture_output=True, text=True, timeout=10
+        [sys.executable, "-m", "mindful", "start", "--help"],
+        env=os.environ.copy(),
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     assert result.returncode == 0, (
         f"start --help exited {result.returncode}: {result.stderr!r}"
