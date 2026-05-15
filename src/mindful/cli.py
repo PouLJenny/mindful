@@ -240,6 +240,37 @@ def cmd_stats(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_history(args: argparse.Namespace) -> int:
+    """Print completed sessions in chronological order. Read-only.
+
+    Per the read-only contract (spec.md "Read-only commands"), this MUST
+    NOT create ~/.mindful/, sessions.json, or any sibling on disk.
+    """
+    home = _mindful_dir()
+    sessions_file = home / SESSIONS_FILE
+
+    sessions: list[dict] = []
+    corrupt = False
+    if sessions_file.exists():
+        sessions, corrupt = _load_sessions(sessions_file)
+        if corrupt:
+            print(
+                f"warning: {sessions_file} is unreadable; "
+                f"showing partial history",
+                file=sys.stderr,
+            )
+
+    completed = [s for s in sessions if s.get("status") == "completed"]
+    completed.sort(key=lambda s: s.get("start_time") or "")
+
+    for entry in completed:
+        start = entry.get("start_time") or "?"
+        duration = entry.get("duration", "?")
+        mode = entry.get("mode") or "?"
+        print(f"{start}  {duration}min  {mode}")
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mindful",
@@ -261,6 +292,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     sub.add_parser("stats", help="Show meditation stats (read-only)")
+    sub.add_parser("history", help="List completed sessions (read-only)")
 
     return parser
 
@@ -272,6 +304,8 @@ def main(argv: list[str] | None = None) -> int:
         rc = cmd_start(args)
     elif args.cmd == "stats":
         rc = cmd_stats(args)
+    elif args.cmd == "history":
+        rc = cmd_history(args)
     else:
         parser.print_help()
         rc = 0
