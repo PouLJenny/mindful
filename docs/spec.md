@@ -29,6 +29,16 @@ countdown, plays guidance, and on completion records the session.
 - On completion, marks status=completed, updates streak
 - Returns session_id (printed to stdout)
 
+**Streak rule — same-day completions** (pinned):
+A second completed session on the **same calendar date** does NOT increment
+`current_streak`. The streak counts consecutive *days* with at least one
+completed session, not the number of completed sessions. Sessions on
+day N+1 increment the streak by 1 (regardless of how many sessions were
+completed on day N); sessions on day N do not change the count once it
+already reflects day N. Rationale: the streak is a habit signal —
+practising twice in one day proves consistency on that day, not on a
+second day.
+
 **Failure modes the product claims to handle**:
 - Ctrl+C mid-session → save with status=interrupted, do NOT count toward streak
 - duration > 120 → exit code 1, clear error message
@@ -82,6 +92,16 @@ order.
   - `completion_rate_30d` — fraction in `[0.00, 1.00]` with two decimal
     places (e.g. `0.00`, `0.83`). It is **not** a percentage.
 - Lines are written to stdout. Warnings (corrupt data, etc.) go to stderr.
+
+**`completion_rate_30d` denominator** (pinned):
+The denominator is `started_in_last_30d` — the count of sessions whose
+`start_time` falls within the last 30 days, regardless of final
+`status`. It is **not** a constant (e.g., not 30 "expected sessions per
+month") and **not** restricted to completed-only sessions (which would
+make the rate always 1.00 by construction). When `started_in_last_30d`
+is 0, `completion_rate_30d` is reported as `0.00`. Rationale: the
+metric measures follow-through — of the sessions the user actually
+started in the window, what fraction did they complete?
 
 **Failure modes**:
 - `sessions.json` corrupt → recover what's parseable, warn to stderr
