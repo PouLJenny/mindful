@@ -25,6 +25,18 @@ SESSIONS_FILE = "sessions.json"
 STREAK_FILE = "streak.json"
 
 
+class _UserErrorArgumentParser(argparse.ArgumentParser):
+    """ArgumentParser that exits with status 1 (user error) on parse failure.
+
+    The stock argparse uses status 2, but the spec reserves 2 for **data
+    error**; argument validation failures are user errors → 1.
+    """
+
+    def error(self, message: str) -> None:  # type: ignore[override]
+        self.print_usage(sys.stderr)
+        self.exit(1, f"{self.prog}: error: {message}\n")
+
+
 def _mindful_dir() -> Path:
     return Path.home() / HOME_SUBDIR
 
@@ -272,11 +284,15 @@ def cmd_history(args: argparse.Namespace) -> int:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = _UserErrorArgumentParser(
         prog="mindful",
         description="A command-line meditation companion.",
     )
-    sub = parser.add_subparsers(dest="cmd", metavar="COMMAND")
+    sub = parser.add_subparsers(
+        dest="cmd",
+        metavar="COMMAND",
+        parser_class=_UserErrorArgumentParser,
+    )
 
     p_start = sub.add_parser("start", help="Start a meditation session")
     p_start.add_argument(
