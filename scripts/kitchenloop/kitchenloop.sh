@@ -1140,6 +1140,7 @@ create_iter_worktree() {
   git -C "$REPO_ROOT" worktree prune >/dev/null 2>&1 || true
   if [ -d "$wt_path" ]; then
     echo "  [worktree] Removing stale worktree: $wt_path" >&2
+    rehome_editable_install "$wt_path"
     git -C "$REPO_ROOT" worktree remove --force "$wt_path" >/dev/null 2>&1 || rm -rf "$wt_path"
   fi
   if git -C "$REPO_ROOT" rev-parse --verify "$branch" >/dev/null 2>&1; then
@@ -1492,10 +1493,30 @@ verify_merge() {
   fi
 }
 
+# ─── Helper: rehome_editable_install ──────────────────────────────────
+# If the project venv has an editable install (.pth in site-packages) pointing
+# into $1, re-install from $REPO_ROOT so the package survives worktree removal.
+rehome_editable_install() {
+  local doomed_path="$1"
+  local venv_pip="$REPO_ROOT/.venv/bin/pip"
+  [ -x "$venv_pip" ] || return 0
+  local site_pkgs
+  for site_pkgs in "$REPO_ROOT"/.venv/lib/python*/site-packages; do
+    [ -d "$site_pkgs" ] || continue
+    if grep -lF "$doomed_path" "$site_pkgs"/*.pth 2>/dev/null | grep -q .; then
+      echo "  [cleanup] Editable install in .venv points into worktree -- rehoming to $REPO_ROOT" >&2
+      "$venv_pip" install -e "$REPO_ROOT" >/dev/null 2>&1 \
+        || echo "  [cleanup] WARNING: rehome failed (run 'pip install -e .' manually)" >&2
+      return 0
+    fi
+  done
+}
+
 # ─── Helper: cleanup_iter_worktree ────────────────────────────────────
 cleanup_iter_worktree() {
   local wt_path="$1" iter_num="$2"
   echo "  [cleanup] Removing iteration worktree..."
+  rehome_editable_install "$wt_path"
   git -C "$REPO_ROOT" worktree remove "$wt_path" 2>/dev/null || rm -rf "$wt_path"
   git -C "$REPO_ROOT" branch -D "${ITER_BRANCH_PREFIX}-${iter_num}" 2>/dev/null || true
   git -C "$REPO_ROOT" push origin --delete "${ITER_BRANCH_PREFIX}-${iter_num}" 2>/dev/null || true
