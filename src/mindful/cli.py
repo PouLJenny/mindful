@@ -23,6 +23,13 @@ VALID_MODES = ("bell_only", "voice_guide", "breath_pacing")
 HOME_SUBDIR = ".mindful"
 SESSIONS_FILE = "sessions.json"
 STREAK_FILE = "streak.json"
+CONFIG_FILE = "config.json"
+
+CONFIG_DEFAULTS: dict[str, str] = {
+    "bell_sound": "default",
+    "duration_default": "10",
+    "voice_gender": "neutral",
+}
 
 
 class _UserErrorArgumentParser(argparse.ArgumentParser):
@@ -283,6 +290,66 @@ def cmd_history(args: argparse.Namespace) -> int:
     return 0
 
 
+def _load_config(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    return {str(k): str(v) for k, v in raw.items()}
+
+
+def cmd_config(args: argparse.Namespace) -> int:
+    """`mindful config --get <key>` (read-only) | `--set <key> <value>` (write)."""
+    home = _mindful_dir()
+    config_file = home / CONFIG_FILE
+
+    if args.get is not None:
+        key = args.get[0]
+        if key not in CONFIG_DEFAULTS:
+            print(
+                f"error: unknown config key {key!r}; "
+                f"valid keys: {', '.join(sorted(CONFIG_DEFAULTS))}",
+                file=sys.stderr,
+            )
+            return 1
+        # Read-only path: NO mkdir, NO file creation.
+        config = _load_config(config_file)
+        print(config.get(key, CONFIG_DEFAULTS[key]))
+        return 0
+
+    if args.set is not None:
+        key, value = args.set
+        if key not in CONFIG_DEFAULTS:
+            print(
+                f"error: unknown config key {key!r}; "
+                f"valid keys: {', '.join(sorted(CONFIG_DEFAULTS))}",
+                file=sys.stderr,
+            )
+            return 1
+        try:
+            home.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            print(f"error: cannot create {home}: {exc}", file=sys.stderr)
+            return 3
+        config = _load_config(config_file)
+        config[key] = value
+        try:
+            _atomic_write(config_file, json.dumps(config, indent=2, sort_keys=True))
+        except OSError as exc:
+            print(f"error: cannot write {config_file}: {exc}", file=sys.stderr)
+            return 3
+        return 0
+
+    # argparse's mutually_exclusive_group(required=True) prevents this in
+    # practice, but keep the branch defensive.
+    print("error: config requires --get <key> or --set <key> <value>", file=sys.stderr)
+    return 1
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = _UserErrorArgumentParser(
         prog="mindful",
@@ -310,6 +377,21 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("stats", help="Show meditation stats (read-only)")
     sub.add_parser("history", help="List completed sessions (read-only)")
 
+    p_config = sub.add_parser("config", help="Get / set user preferences")
+    cfg_group = p_config.add_mutually_exclusive_group(required=True)
+    cfg_group.add_argument(
+        "--get",
+        metavar="KEY",
+        nargs=1,
+        help="Print the value for KEY (read-only)",
+    )
+    cfg_group.add_argument(
+        "--set",
+        metavar=("KEY", "VALUE"),
+        nargs=2,
+        help="Set KEY to VALUE (writes ~/.mindful/config.json atomically)",
+    )
+
     return parser
 
 
@@ -322,6 +404,8 @@ def main(argv: list[str] | None = None) -> int:
         rc = cmd_stats(args)
     elif args.cmd == "history":
         rc = cmd_history(args)
+    elif args.cmd == "config":
+        rc = cmd_config(args)
     else:
         parser.print_help()
         rc = 0
