@@ -1144,7 +1144,15 @@ create_iter_worktree() {
   fi
   if git -C "$REPO_ROOT" rev-parse --verify "$branch" >/dev/null 2>&1; then
     local ahead_count
-    ahead_count=$(git -C "$REPO_ROOT" rev-list --count "origin/${BASE_BRANCH}..$branch" 2>/dev/null || echo 0)
+    # Compare against the branch's own remote counterpart when it exists --
+    # commits already on origin/$branch are safe even if not on origin/$BASE_BRANCH.
+    # Fall back to origin/$BASE_BRANCH only for branches that were never pushed.
+    if git -C "$REPO_ROOT" ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+      git -C "$REPO_ROOT" fetch origin "$branch" >/dev/null 2>&1 || true
+      ahead_count=$(git -C "$REPO_ROOT" rev-list --count "origin/${branch}..$branch" 2>/dev/null || echo 0)
+    else
+      ahead_count=$(git -C "$REPO_ROOT" rev-list --count "origin/${BASE_BRANCH}..$branch" 2>/dev/null || echo 0)
+    fi
     if [ "$ahead_count" -gt 0 ]; then
       echo "  [worktree] ERROR: Refusing to delete $branch ($ahead_count unpushed commit(s))" >&2
       return 1
